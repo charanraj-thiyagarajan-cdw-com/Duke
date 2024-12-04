@@ -61,8 +61,16 @@ def capture_image_from_camera(substation_id):
     else:
         print("Image capture completed successfully.")
 
-def detect_event_type(frame):
+def detect_event_type(image_path):
     """Detect whether the image contains a face or a license plate."""
+    frame = cv2.imread(image_path)
+    
+    # Check if the image was loaded successfully
+    if frame is None:
+        print(f"Error: Unable to load image at {image_path}")
+        return
+
+    # Convert the image to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # Check for license plates in the image using Tesseract
@@ -73,8 +81,6 @@ def detect_event_type(frame):
     faces = face_cascade.detectMultiScale(gray, 1.1, 4)
     if len(faces) > 0:
         return "face"
-
-    
 
     # If no face or license plate is detected
     return "unknown"

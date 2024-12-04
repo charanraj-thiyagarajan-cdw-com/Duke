@@ -1,9 +1,10 @@
+fastapi
 ImageHash
 numpy
 opencv-python
 pillow
 pytesseract
-fastapi
-uvicorn
 python-multipart
 requests
+uvicorn
+watchdog

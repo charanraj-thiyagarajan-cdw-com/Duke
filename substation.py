@@ -1,40 +1,36 @@
 from datetime import datetime
-import json
-from camera import capture_image_from_camera
+import time
+import os
 import argparse
-from event_processing import check_event
+import uuid
 import requests
+from camera import detect_event_type
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--substation", type=str, help="Substation ID", required=True)
-    args = parser.parse_args()
-    substation_id = args.substation
-    if substation_id:
-        capture_image_from_camera(substation_id)
-        json_file_path = f'{substation_id}.json'
+class ImageHandler(FileSystemEventHandler):
+    def __init__(self, folder_to_monitor, substation):
+        self.folder_to_monitor = folder_to_monitor
+        self.substion = substation
 
-        # Read the event data from the JSON file
-        with open(json_file_path, 'r') as file:
-            events_data = json.load(file)
+    def on_created(self, event):
+        # Check if the created file is an image
+        if not event.is_directory and event.src_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+            print(f"New image detected: {event.src_path}")
+            self.send_image(event.src_path)
 
-        for event in events_data:
-            event_id = event["event_id"]
-            substation_id = event["SubstationId"]
-            image_url = event["event_url"]
-            timestamp = datetime.strptime(event["timestamp"], "%Y-%m-%dT%H:%M:%S")
-            event_type = event.get("event_type", "face")  # Default to face if no type is provided
-
+    def send_image(self, file_path):
+        try:
             url = "http://127.0.0.1:8000/add-event"
-
+            
             # Open the image file in binary mode
-            with open(image_url, "rb") as file:
+            with open(file_path, "rb") as file:
                 # Prepare the data and files
                 data = {
-                    "event_id": event_id,
+                    "event_id": str(uuid.uuid4()),
                     "substation_id": substation_id,
-                    "timestamp": timestamp.isoformat(),
-                    "event_type": event_type,
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                    "event_type": detect_event_type(file_path),
                 }
                 files = {"file": file}
 
@@ -42,5 +38,33 @@ if __name__ == "__main__":
                 response = requests.post(url, data=data, files=files)
 
                 # Print the response from the server
+                if response.status_code == 200:
+                    print(f"Successfully sent image: {file_path}")
+                else:
+                    print(f"Failed to send image: {response.status_code}")
                 print(response.text)
-            
+        except Exception as e:
+            print(f"Error sending image: {e}")
+
+def monitor_folder(folder_to_monitor, substation):
+    event_handler = ImageHandler(folder_to_monitor, substation)
+    observer = Observer()
+    observer.schedule(event_handler, folder_to_monitor, recursive=False)
+    observer.start()
+    print(f"Monitoring folder: {folder_to_monitor}")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--substation", type=str, help="Substation ID", required=True)
+    args = parser.parse_args()
+    substation_id = args.substation
+    os.makedirs(substation_id, exist_ok=True)
+    if substation_id:
+        folder_to_monitor = f"./{substation_id}"
+        monitor_folder(folder_to_monitor, substation_id)

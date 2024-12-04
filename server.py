@@ -38,7 +38,9 @@ async def create_upload_file(
     store_event(event_id, substation_id, save_path, timestamp, event_type)
     print(f"{event_type.capitalize()} event {event_id} stored successfully at {timestamp} and it's a {event_status}")
     
-    if "Threat" in event_status:
-        print(f"Threat alert!")
+    response = {"message": f"{event_id} saved at central server"}
 
-    return {"message": f"{event_id} saved at central server"}
+    if "Threat" in event_status:
+        response["Threat"] = True
+
+    return response
